@@ -2,14 +2,14 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:sundrift/core/constants/app_constants.dart';
 import 'package:sundrift/core/storage/local_storage.dart';
+import 'package:sundrift/core/network/api_client.dart';
 import 'package:sundrift/data/models/current_weather_model.dart';
 import 'package:sundrift/data/models/forecast_model.dart';
 
 class HomeController extends GetxController {
   // Dependencies
-  //final ApiClient _apiClient = Get.find<ApiClient>();
+  final ApiClient _apiClient = Get.find<ApiClient>();
   final LocalStorage _localStorage = Get.find<LocalStorage>();
-  //final LocationPermission _locationPermission = Get.find<LocationPermission>();
 
   // Observable variables
   final RxBool isLoading = true.obs;
@@ -31,49 +31,67 @@ class HomeController extends GetxController {
   }
 
   // Fetch weather data
-  Future<void> fetchWeatherData() async {
+  Future<void> fetchWeatherData({String? location}) async {
     isLoading.value = true;
     hasError.value = false;
     errorMessage.value = '';
 
     try {
-      // For now, we'll use a placeholder location until we implement the actual location services
-      // In the future, this would use the user's current location or a saved location
-      final location = _localStorage.getString(
-        AppConstants.storageKeyLastLocation,
-        defaultValue: 'New York',
-      );
+      // Get location from parameter, local storage, or use default
+      final String locationQuery = location ??
+          _localStorage.getString(
+            'current_location_query',
+            defaultValue: _localStorage.getString(
+              AppConstants.storageKeyLastLocation,
+              defaultValue: 'New York',
+            ),
+          );
 
-      // Update current location
-      currentLocation.value = location;
+      // Update current location display name
+      String displayLocation = locationQuery;
+      if (locationQuery.contains(',')) {
+        // If it's lat/lon coordinates, use the stored location name
+        displayLocation = _localStorage.getString(
+          AppConstants.storageKeyLastLocation,
+          defaultValue: 'Current Location',
+        );
+      }
+      currentLocation.value = displayLocation;
 
       // Update last updated time
       final now = DateTime.now();
       lastUpdated.value = DateFormat('h:mm a').format(now);
 
-      // Simulate API delay for testing
-      await Future.delayed(const Duration(seconds: 2));
+      // Make API calls to fetch real weather data
+      try {
+        // Get current weather
+        final weatherData = await _apiClient.getCurrentWeather(
+          location: locationQuery,
+        );
 
-      // Here we would make API calls to fetch weather data
-      // For now, we'll just use placeholder data
+        currentWeather.value = CurrentWeatherModel.fromJson(weatherData);
 
-      // Placeholder for current weather data
-      currentWeather.value = CurrentWeatherModel(
-        temperature: 23,
-        feelsLike: 24,
-        conditionText: 'Sunny',
-        conditionCode: 1000,
-        humidity: 60,
-        windSpeed: 15,
-        windDirection: 'NE',
-        pressure: 1012,
-        precipitation: 0,
-        uv: 5,
-        visibility: 10,
-      );
+        // Get forecast data
+        final forecastData = await _apiClient.getForecast(
+          location: locationQuery,
+          days: 7,
+        );
 
-      // Placeholder for forecast data
-      // In the real app, this would come from the API
+        forecast.value = ForecastModel.fromJson(forecastData);
+
+        // Save location as last location
+        _localStorage.setString(
+          AppConstants.storageKeyLastLocation,
+          weatherData['location']['name'] ?? displayLocation,
+        );
+
+        // Store the location query for future use
+        _localStorage.setString('current_location_query', locationQuery);
+      } catch (e) {
+        // If API calls fail, use placeholder data for development
+        _usePlaceholderData();
+        print('Using placeholder data due to API error: $e');
+      }
 
       isLoading.value = false;
     } catch (e) {
@@ -83,8 +101,31 @@ class HomeController extends GetxController {
     }
   }
 
+  // Use placeholder data for development/testing
+  void _usePlaceholderData() {
+    // Placeholder for current weather data
+    currentWeather.value = CurrentWeatherModel(
+      temperature: 23,
+      feelsLike: 24,
+      conditionText: 'Sunny',
+      conditionCode: 1000,
+      humidity: 60,
+      windSpeed: 15,
+      windDirection: 'NE',
+      pressure: 1012,
+      precipitation: 0,
+      uv: 5,
+      visibility: 10,
+    );
+
+    // Placeholder for forecast data would be created here
+    // This is just a stub - in a real implementation you'd create
+    // a proper ForecastModel with hourly and daily data
+  }
+
   // Refresh weather data
   Future<void> refreshWeatherData() async {
     await fetchWeatherData();
+    return Future.value();
   }
 }

@@ -18,12 +18,15 @@ import 'package:sundrift/app/bindings/settings_binding.dart';
 // Create a splash page for the routes
 import 'package:sundrift/presentation/pages/splash_page.dart';
 
+import '../bindings/splash_binding.dart';
+
 /// App pages and their bindings
 class AppPages {
   static final routes = [
     GetPage(
       name: AppRoutes.SPLASH,
       page: () => const SplashPage(),
+      binding: SplashBinding(), // Add this line
       transition: Transition.fade,
     ),
     GetPage(

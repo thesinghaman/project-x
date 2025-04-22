@@ -13,12 +13,15 @@ class InitialBinding extends Bindings {
   @override
   void dependencies() {
     // Core services
-    Get.put(ApiClient(), permanent: true);
-    Get.put(ConnectivityManager(), permanent: true);
-    Get.put(LocalStorage(), permanent: true);
-    Get.put(SecureStorage(), permanent: true);
-    Get.put(DeviceInfo(), permanent: true);
-    Get.put(PermissionHandler(), permanent: true);
+    // We need to make sure ConnectivityManager is initialized BEFORE ApiClient
+    Get.put(ConnectivityManager().init(), permanent: true); // Initialize first
+    Get.put(LocalStorage().init(), permanent: true);
+    Get.put(SecureStorage().init(), permanent: true);
+    Get.put(DeviceInfo().init(), permanent: true);
+    Get.put(PermissionHandler().init(), permanent: true);
     Get.put(AppLifecycleService(), permanent: true);
+
+    // Only put ApiClient after ConnectivityManager is initialized
+    Get.put(ApiClient(), permanent: true);
   }
 }

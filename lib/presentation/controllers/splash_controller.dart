@@ -16,14 +16,18 @@ class SplashController extends GetxController {
   }
 
   Future<void> _initApp() async {
+    print("SplashController: Starting initApp");
+
     // Add a delay to show the splash screen
     await Future.delayed(AppConstants.splashScreenDuration);
+    print("SplashController: Delay completed");
 
     // Check if onboarding is complete
     bool isOnboardingComplete = _localStorage.getBool(
       AppConstants.storageKeyOnboardingComplete,
       defaultValue: false,
     );
+    print("SplashController: isOnboardingComplete = $isOnboardingComplete");
 
     if (isOnboardingComplete) {
       // User has completed onboarding, check permissions
