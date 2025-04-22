@@ -120,10 +120,8 @@ class SearchController extends GetxController {
       final results = await _apiClient.searchLocation(query: query);
       searchResults.value = results;
 
-      // Add to recent searches if results found
-      if (results.isNotEmpty) {
-        addToRecentSearches(query);
-      }
+      // We don't add search queries to history anymore
+      // Only actual selected locations will be added to the history
     } catch (e) {
       hasError.value = true;
       errorMessage.value = e.toString();
@@ -133,14 +131,24 @@ class SearchController extends GetxController {
     }
   }
 
-  // Add query to recent searches
-  void addToRecentSearches(String query) {
-    // Create a new list without the current query (if it exists)
-    final List<String> searches =
-        recentSearches.where((element) => element != query).toList();
+  // Add location to recent searches
+  void addLocationToRecentSearches(dynamic location) {
+    if (location == null || !location.containsKey('name')) {
+      return;
+    }
 
-    // Add the query to the beginning
-    searches.insert(0, query);
+    // Create a formatted location name (City, Country)
+    String locationName = location['name'];
+    if (location.containsKey('country') && location['country'] != null) {
+      locationName = "$locationName, ${location['country']}";
+    }
+
+    // Create a new list without the current location (if it exists)
+    final List<String> searches =
+        recentSearches.where((element) => element != locationName).toList();
+
+    // Add the location to the beginning
+    searches.insert(0, locationName);
 
     // Limit the list size
     if (searches.length > AppConstants.maxRecentSearches) {
@@ -171,6 +179,9 @@ class SearchController extends GetxController {
 
   // Select a location from search results
   void selectLocation(dynamic location) {
+    // Add the selected location to recent searches history
+    addLocationToRecentSearches(location);
+
     // Create a location ID
     String locationId = '${location["name"]}_${location["country"]}';
 
@@ -220,5 +231,16 @@ class SearchController extends GetxController {
   bool isLocationFavorite(dynamic location) {
     String locationId = '${location["name"]}_${location["country"]}';
     return _favoritesController.isLocationFavorite(locationId);
+  }
+
+  // Remove individual recent search
+  void removeRecentSearch(String searchText) {
+    final List<String> searches = recentSearches.toList();
+    searches.removeWhere((element) => element == searchText);
+    recentSearches.value = searches;
+    localStorage.setObject(
+      AppConstants.storageKeyRecentSearches,
+      searches,
+    );
   }
 }
