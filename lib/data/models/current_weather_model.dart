@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 /// Model class for current weather data
 class CurrentWeatherModel {
   final int temperature;
@@ -31,6 +33,10 @@ class CurrentWeatherModel {
   // Create model from API JSON response
   factory CurrentWeatherModel.fromJson(Map<String, dynamic> json) {
     final current = json['current'];
+
+    try {} catch (e) {
+      log("GOT YOU");
+    }
 
     return CurrentWeatherModel(
       temperature: current['temp_c'].round(),

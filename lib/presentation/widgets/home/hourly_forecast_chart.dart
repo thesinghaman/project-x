@@ -1,3 +1,5 @@
+// Complete lib/presentation/widgets/home/hourly_forecast_chart.dart
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
@@ -79,14 +81,14 @@ class HourlyForecastChart extends StatelessWidget {
                     _buildLegendItem(
                       context,
                       'Temperature',
-                      Colors.orange,
+                      Theme.of(context).colorScheme.primary,
                     ),
                     const SizedBox(width: AppDimensions.md),
                     if (showPrecipitation)
                       _buildLegendItem(
                         context,
                         'precipitation'.tr,
-                        Colors.blue,
+                        Colors.blue.shade400,
                       ),
                   ],
                 ),
@@ -127,40 +129,56 @@ class HourlyForecastChart extends StatelessWidget {
     List<FlSpot> temperatureSpots = [];
     List<FlSpot> precipitationSpots = [];
 
+    // Find min/max temperature
+    for (int i = 0; i < hourlyForecasts.length; i++) {
+      final forecast = hourlyForecasts[i];
+      final double temp = temperatureUnit == AppConstants.unitCelsius
+          ? forecast.temperature.toDouble()
+          : forecast.tempF;
+
+      if (temp < minY) minY = temp;
+      if (temp > maxY) maxY = temp;
+    }
+
+    // Calculate base line for precipitation (at the bottom of the chart)
+    final tempRange = maxY - minY;
+    final precipBase = minY - (tempRange * 0.1); // Slightly below the min temp
+
+    // Find max precipitation for scaling
+    double maxPrecip = 0.0;
+    for (var forecast in hourlyForecasts) {
+      if (forecast.precipitation > maxPrecip) {
+        maxPrecip = forecast.precipitation;
+      }
+    }
+
+    // Calculate precipitation scaling factor
+    // We want max precipitation to reach about 15% of the chart height
+    final double precipScale =
+        maxPrecip > 0 ? (tempRange * 0.15) / maxPrecip : 1.0;
+
     // Process hourly forecasts
     for (int i = 0; i < hourlyForecasts.length; i++) {
       final forecast = hourlyForecasts[i];
 
-      // Get temperature based on unit and ensure it's a double
+      // Temperature spot
       final double temp = temperatureUnit == AppConstants.unitCelsius
           ? forecast.temperature.toDouble()
-          : (forecast.tempF is int
-              ? (forecast.tempF as int).toDouble()
-              : forecast.tempF);
-
-      // Add temperature point
+          : forecast.tempF;
       temperatureSpots.add(FlSpot(i.toDouble(), temp));
 
-      // Update min/max for scaling
-      if (temp < minY) minY = temp;
-      if (temp > maxY) maxY = temp;
-
-      // Add precipitation point if showing precipitation
+      // Precipitation spot (if showing)
       if (showPrecipitation) {
-        // Ensure precipitation is a double
-        final double precipitation = forecast.precipitation is int
-            ? (forecast.precipitation as int).toDouble()
-            : forecast.precipitation;
-
-        precipitationSpots.add(
-            FlSpot(i.toDouble(), precipitation * 10)); // Scale for visibility
+        final double scaledPrecip =
+            precipBase + (forecast.precipitation * precipScale);
+        precipitationSpots.add(FlSpot(i.toDouble(), scaledPrecip));
       }
     }
 
-    // Adjust min/max to add padding and ensure good scale
-    final range = maxY - minY;
-    minY = minY - (range * 0.1);
-    maxY = maxY + (range * 0.1);
+    // Adjust min/max to add padding
+    minY =
+        minY - (tempRange * 0.15); // More padding at bottom for precipitation
+    maxY = maxY + (tempRange * 0.1); // Some padding at top
 
     // Create the LineChartData
     return LineChart(
@@ -217,6 +235,11 @@ class HourlyForecastChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 30,
               getTitlesWidget: (value, meta) {
+                // Only show titles for temperature values, not precipitation
+                if (value < precipBase + (tempRange * 0.05)) {
+                  return const SizedBox.shrink();
+                }
+
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Text(
@@ -235,7 +258,6 @@ class HourlyForecastChart extends StatelessWidget {
         maxY: maxY,
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            //tooltipBgColor: Theme.of(context).colorScheme.surface,
             tooltipRoundedRadius: 8,
             tooltipPadding: const EdgeInsets.all(8),
             tooltipBorder: BorderSide(
@@ -243,27 +265,47 @@ class HourlyForecastChart extends StatelessWidget {
             ),
             getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
               return touchedBarSpots.map((barSpot) {
-                final index = barSpot.x.toInt();
-                if (index >= hourlyForecasts.length) return null;
+                if (barSpot.barIndex == 0) {
+                  // Temperature line
+                  final index = barSpot.x.toInt();
+                  if (index >= hourlyForecasts.length) return null;
 
-                final forecast = hourlyForecasts[index];
+                  final forecast = hourlyForecasts[index];
 
-                // Format text based on which line was touched
-                final text = barSpot.barIndex == 0
-                    ? '${barSpot.y.toInt()}°'
-                    : '${(barSpot.y / 10).toStringAsFixed(1)} mm'; // Rescale precipitation
+                  return LineTooltipItem(
+                    '${barSpot.y.toInt()}°',
+                    TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '\n${forecast.conditionText}',
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                          fontWeight: FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  // Precipitation line
+                  final index = barSpot.x.toInt();
+                  if (index >= hourlyForecasts.length) return null;
 
-                // Different styling based on line
-                final color =
-                    barSpot.barIndex == 0 ? Colors.orange : Colors.blue;
+                  final forecast = hourlyForecasts[index];
+                  if (forecast.precipitation <= 0) return null;
 
-                return LineTooltipItem(
-                  text,
-                  TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
+                  return LineTooltipItem(
+                    '${forecast.precipitation.toStringAsFixed(1)} mm',
+                    TextStyle(
+                      color: Colors.blue.shade400,
+                      fontWeight: FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                  );
+                }
               }).toList();
             },
           ),
@@ -273,31 +315,38 @@ class HourlyForecastChart extends StatelessWidget {
           LineChartBarData(
             spots: temperatureSpots,
             isCurved: true,
-            color: Colors.orange,
+            color: Theme.of(context).colorScheme.primary,
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: FlDotData(
-              show: false,
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 2,
+                  color: Theme.of(context).colorScheme.primary,
+                  strokeWidth: 1,
+                  strokeColor: Colors.white,
+                );
+              },
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: Colors.orange.withOpacity(0.1),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
             ),
           ),
-          // Precipitation line (if showing)
+
+          // Precipitation line
           if (showPrecipitation)
             LineChartBarData(
               spots: precipitationSpots,
               isCurved: true,
-              color: Colors.blue,
-              barWidth: 2,
+              color: Colors.blue.shade400,
+              barWidth: 1,
               isStrokeCapRound: true,
-              dotData: FlDotData(
-                show: false,
-              ),
+              dotData: FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withOpacity(0.05),
               ),
             ),
         ],
@@ -305,7 +354,6 @@ class HourlyForecastChart extends StatelessWidget {
     );
   }
 
-  // Build legend item for chart
   Widget _buildLegendItem(BuildContext context, String label, Color color) {
     return Row(
       children: [

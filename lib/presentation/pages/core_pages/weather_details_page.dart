@@ -21,7 +21,6 @@ class WeatherDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Get arguments
     final arguments = Get.arguments as Map<String, dynamic>;
-    final locationId = arguments['locationId'] as String;
     final location = arguments['location'] as FavoriteLocationModel;
 
     // Initialize controller
