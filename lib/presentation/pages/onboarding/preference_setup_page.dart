@@ -24,31 +24,6 @@ class PreferenceSetupPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Center(
-                child: Animate(
-                  effects: [
-                    FadeEffect(
-                      duration: AppDimensions.animNormal,
-                      delay: Duration.zero,
-                    ),
-                    ScaleEffect(
-                      duration: AppDimensions.animNormal,
-                      delay: Duration.zero,
-                      begin: const Offset(0.95, 0.95),
-                      end: const Offset(1.0, 1.0),
-                    ),
-                  ],
-                  child: Image.asset(
-                    AssetPaths.preferenceSetup,
-                    height: 150,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: AppDimensions.lg),
-
               // Title
               Animate(
                 effects: [
@@ -103,6 +78,8 @@ class PreferenceSetupPage extends StatelessWidget {
                   ),
                 ),
               ),
+
+              const SizedBox(height: AppDimensions.lg),
 
               // Get Started button
               Animate(

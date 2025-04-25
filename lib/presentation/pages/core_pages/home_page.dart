@@ -17,7 +17,7 @@ class HomePage extends StatelessWidget {
     final controller = Get.find<HomeController>();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Obx(() {
           // Show loading state

@@ -4,15 +4,17 @@ import 'package:iconsax/iconsax.dart';
 import 'package:sundrift/app/themes/app_theme.dart';
 import 'package:sundrift/core/constants/app_constants.dart';
 import 'package:sundrift/core/storage/local_storage.dart';
-import 'package:sundrift/data/models/day_forecast_model.dart';
 import 'package:sundrift/data/models/favorite_location_model.dart';
 import 'package:sundrift/data/models/current_weather_model.dart';
 import 'package:sundrift/data/models/forecast_model.dart';
 import 'package:sundrift/presentation/controllers/weather_details_controller.dart';
 import 'package:sundrift/presentation/widgets/common/weather_stats_grid.dart';
-import 'package:sundrift/presentation/widgets/home/hourly_forecast_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
+
+// Import our new widgets
+import 'package:sundrift/presentation/widgets/home/hourly_forecast_chart.dart';
+import 'package:sundrift/presentation/widgets/home/daily_forecast_widget.dart';
 
 class WeatherDetailsPage extends StatelessWidget {
   const WeatherDetailsPage({Key? key}) : super(key: key);
@@ -57,6 +59,9 @@ class WeatherDetailsPage extends StatelessWidget {
           icon: const Icon(Iconsax.arrow_left),
           onPressed: () => Get.back(),
         ),
+        // Make sure the error view app bar is opaque
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
       ),
       body: Center(
         child: Column(
@@ -157,29 +162,17 @@ class WeatherDetailsPage extends StatelessWidget {
 
                 // Hourly forecast if available
                 if (forecast != null && forecast.hourlyForecasts.isNotEmpty)
-                  Animate(
-                    effects: const [
-                      FadeEffect(
-                        duration: AppDimensions.animNormal,
-                        delay: Duration(milliseconds: 100),
-                      ),
-                      SlideEffect(
-                        duration: AppDimensions.animNormal,
-                        delay: Duration(milliseconds: 100),
-                        begin: Offset(0, 0.2),
-                        end: Offset(0, 0),
-                      ),
-                    ],
-                    child: HourlyForecastChart(
-                      hourlyForecasts: forecast.hourlyForecasts,
-                    ),
+                  HourlyForecastChart(
+                    hourlyForecasts: forecast.hourlyForecasts,
                   ),
 
                 const SizedBox(height: AppDimensions.lg),
 
                 // Daily forecast
                 if (forecast != null && forecast.dailyForecasts.isNotEmpty)
-                  _buildDailyForecast(context, forecast),
+                  DailyForecastWidget(
+                    dailyForecasts: forecast.dailyForecasts,
+                  ),
 
                 const SizedBox(height: AppDimensions.xxl),
 
@@ -192,15 +185,39 @@ class WeatherDetailsPage extends StatelessWidget {
                     ),
                   ],
                   child: Center(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          controller.setAsCurrentLocation(location),
-                      icon: const Icon(Iconsax.location),
-                      label: Text('Set as Current Location'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppDimensions.lg,
-                          vertical: AppDimensions.md,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusMd),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            controller.setAsCurrentLocation(location),
+                        icon: const Icon(Iconsax.location),
+                        label: Text('Set as Current Location'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppDimensions.lg,
+                            vertical: AppDimensions.md,
+                          ),
+                          backgroundColor:
+                              Theme.of(context).colorScheme.surface,
+                          foregroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
@@ -245,6 +262,12 @@ class WeatherDetailsPage extends StatelessWidget {
       expandedHeight: 300,
       pinned: true,
       stretch: true,
+      // Make the collapsed app bar use primary color and be completely opaque
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      foregroundColor: Colors.white,
+      // Ensure the app bar is completely opaque when collapsed
+      scrolledUnderElevation: 0,
+      elevation: 0,
       leading: IconButton(
         icon: const Icon(Iconsax.arrow_left),
         onPressed: () => Get.back(),
@@ -352,171 +375,19 @@ class WeatherDetailsPage extends StatelessWidget {
             ),
           ],
         ),
+        // Don't show title in the collapsed app bar to avoid duplicate title
+        titlePadding: EdgeInsets.zero,
+        // Center the title text
+        centerTitle: true,
+        // Make the title empty because we want a custom title in the AppBar
+        title: const SizedBox.shrink(),
+        // Prevent the title from fading in when collapsing
+        collapseMode: CollapseMode.pin,
       ),
-    );
-  }
-
-  // Build daily forecast section
-  Widget _buildDailyForecast(BuildContext context, ForecastModel forecast) {
-    return Animate(
-      effects: const [
-        FadeEffect(
-          duration: AppDimensions.animNormal,
-          delay: Duration(milliseconds: 200),
-        ),
-        SlideEffect(
-          duration: AppDimensions.animNormal,
-          delay: Duration(milliseconds: 200),
-          begin: Offset(0, 0.2),
-          end: Offset(0, 0),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title
-          Text(
-            'daily_forecast'.tr,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-
-          const SizedBox(height: AppDimensions.sm),
-
-          // Daily forecast list
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: forecast.dailyForecasts.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final day = forecast.dailyForecasts[index];
-                final isToday = day.isToday();
-
-                return _buildDailyForecastItem(context, day, isToday, index);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Build daily forecast item
-  Widget _buildDailyForecastItem(
-    BuildContext context,
-    DayForecastModel day,
-    bool isToday,
-    int index,
-  ) {
-    final LocalStorage localStorage = Get.find<LocalStorage>();
-
-    // Get temperature unit preference
-    final temperatureUnit = localStorage.getString(
-      AppConstants.storageKeyTemperatureUnit,
-      defaultValue: AppConstants.defaultTemperatureUnit,
-    );
-
-    // Get temperature based on unit
-    final maxTemp = temperatureUnit == AppConstants.unitCelsius
-        ? day.maxTemp
-        : day.maxTempF.round();
-
-    final minTemp = temperatureUnit == AppConstants.unitCelsius
-        ? day.minTemp
-        : day.minTempF.round();
-
-    return Animate(
-      effects: [
-        FadeEffect(
-          duration: AppDimensions.animNormal,
-          delay: Duration(milliseconds: index * 50),
-        ),
-      ],
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppDimensions.md,
-          vertical: AppDimensions.xs,
-        ),
-        tileColor: isToday
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
-            : null,
-        title: Text(
-          isToday ? 'Today' : day.getDayName(),
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: isToday ? FontWeight.bold : null,
-              ),
-        ),
-        subtitle: Row(
-          children: [
-            Icon(
-              _getWeatherIconData(day.conditionCode),
-              size: 16,
-              color: _getWeatherIconColor(day.conditionCode),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              day.conditionText,
-              style: Theme.of(context).textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Precipitation chance
-            if (day.chanceOfRain > 0 || day.chanceOfSnow > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    day.chanceOfRain > day.chanceOfSnow
-                        ? Iconsax.cloud_drizzle
-                        : Iconsax.cloud_snow,
-                    size: 16,
-                    color: Colors.blue,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${(day.chanceOfRain > day.chanceOfSnow ? day.chanceOfRain : day.chanceOfSnow).round()}%',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-
-            // Temperature
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$minTemp°',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.blue.shade700,
-                      ),
-                ),
-                Text(
-                  ' / ',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                Text(
-                  '$maxTemp°',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red.shade700,
-                      ),
-                ),
-              ],
-            ),
-          ],
-        ),
+      // Set a title for the collapsed app bar
+      title: Text(
+        location.name,
+        style: const TextStyle(color: Colors.white),
       ),
     );
   }
@@ -535,40 +406,6 @@ class WeatherDetailsPage extends StatelessWidget {
       return AppGradients.snowyGradient;
     } else {
       return AppGradients.foggyGradient;
-    }
-  }
-
-  // Get weather icon data
-  IconData _getWeatherIconData(int conditionCode) {
-    if (conditionCode == 1000) {
-      return Iconsax.sun_1;
-    } else if (conditionCode >= 1003 && conditionCode <= 1009) {
-      return Iconsax.cloud;
-    } else if (conditionCode >= 1180 && conditionCode <= 1201) {
-      return Iconsax.cloud_drizzle;
-    } else if (conditionCode >= 1273 && conditionCode <= 1282) {
-      return Iconsax.cloud_lightning;
-    } else if (conditionCode >= 1210 && conditionCode <= 1225) {
-      return Iconsax.cloud_snow;
-    } else {
-      return Iconsax.cloud_fog;
-    }
-  }
-
-  // Get color for weather icon
-  Color _getWeatherIconColor(int conditionCode) {
-    if (conditionCode == 1000) {
-      return Colors.orange;
-    } else if (conditionCode >= 1003 && conditionCode <= 1009) {
-      return Colors.blueGrey;
-    } else if (conditionCode >= 1180 && conditionCode <= 1201) {
-      return Colors.blue;
-    } else if (conditionCode >= 1273 && conditionCode <= 1282) {
-      return Colors.purple;
-    } else if (conditionCode >= 1210 && conditionCode <= 1225) {
-      return Colors.lightBlue;
-    } else {
-      return Colors.grey;
     }
   }
 }

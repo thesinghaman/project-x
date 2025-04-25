@@ -490,9 +490,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                 tooltip: 'refresh'.tr,
                               ),
                   ),
-
-                  // Reorder handle (only in normal mode)
-                  if (!_isSelectionMode) const Icon(Iconsax.arrow_right),
                 ],
               ),
             ),

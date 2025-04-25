@@ -15,6 +15,7 @@ class DayForecastModel {
   final double maxWind;
   final int avgVisibility;
   final int uv;
+  final int cloudCover; // Added cloud cover property
 
   DayForecastModel({
     required this.date,
@@ -32,6 +33,7 @@ class DayForecastModel {
     required this.maxWind,
     required this.avgVisibility,
     required this.uv,
+    required this.cloudCover, // Added to constructor
   });
 
   // Create model from API JSON response
@@ -54,6 +56,9 @@ class DayForecastModel {
       maxWind: (day['maxwind_kph'] as num).toDouble(),
       avgVisibility: day['avgvis_km'].round(),
       uv: day['uv'].round(),
+      cloudCover: day['cloud'] ??
+          day['avgcloud'] ??
+          0, // Extract cloud cover with fallback
     );
   }
 
@@ -75,6 +80,7 @@ class DayForecastModel {
       'maxWind': maxWind,
       'avgVisibility': avgVisibility,
       'uv': uv,
+      'cloudCover': cloudCover, // Added to JSON export
     };
   }
 

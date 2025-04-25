@@ -17,7 +17,7 @@ class AssetPaths {
   static const String stormBg = '$backgroundsPath/storm.png';
 
   // Onboarding illustrations
-  static const String onboardingPath = '$imagesPath/illustrations/onboarding';
+  static const String onboardingPath = '$imagesPath/illustrations';
   static const String onboarding1 = '$onboardingPath/onboarding_1.png';
   static const String onboarding2 = '$onboardingPath/onboarding_2.png';
   static const String onboarding3 = '$onboardingPath/onboarding_3.png';
