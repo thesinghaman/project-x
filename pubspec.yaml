@@ -69,6 +69,7 @@ dependencies:
   syncfusion_flutter_gauges: ^29.1.38
   google_fonts: ^6.2.1
   flutter_secure_storage: ^9.2.4
+  smooth_page_indicator: ^1.2.1
 
 dev_dependencies:
   flutter_test:

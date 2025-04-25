@@ -24,23 +24,28 @@ class HourlyForecastChart extends StatefulWidget {
 
 class _HourlyForecastChartState extends State<HourlyForecastChart>
     with SingleTickerProviderStateMixin {
+  // Animation controller
   late AnimationController _animationController;
   late Animation<double> _animation;
 
-  // Touch position for tooltip
-  int? touchedIndex;
+  // For touch interaction
+  int? _touchedIndex;
 
   @override
   void initState() {
     super.initState();
+
+    // Initialize animation controller
     _animationController = AnimationController(
-      vsync: this,
       duration: const Duration(milliseconds: 1500),
+      vsync: this,
     );
+
     _animation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOutCubic,
+      curve: Curves.easeOutCubic,
     );
+
     _animationController.forward();
   }
 
@@ -52,6 +57,11 @@ class _HourlyForecastChartState extends State<HourlyForecastChart>
 
   @override
   Widget build(BuildContext context) {
+    // Check for empty data early and return a placeholder
+    if (widget.hourlyForecasts.isEmpty) {
+      return _buildEmptyState(context);
+    }
+
     final LocalStorage localStorage = Get.find<LocalStorage>();
 
     // Get temperature unit preference
@@ -60,446 +70,300 @@ class _HourlyForecastChartState extends State<HourlyForecastChart>
       defaultValue: AppConstants.defaultTemperatureUnit,
     );
 
-    // Get time format preference
-    final timeFormat = localStorage.getString(
-      AppConstants.storageKeyTimeFormat,
-      defaultValue: AppConstants.defaultTimeFormat,
-    );
-
-    // Return an animated chart card
     return Card(
       elevation: 4,
-      shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+      shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
       ),
-      child: AnimatedBuilder(
-        animation: _animation,
-        builder: (context, child) {
-          return Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Theme.of(context).colorScheme.surface,
-                  Theme.of(context).colorScheme.surface.withBlue(
-                        (Theme.of(context).colorScheme.surface.blue + 15)
-                            .clamp(0, 255),
-                      ),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(AppDimensions.md),
-            child: child,
-          );
-        },
+      child: Container(
+        height: 250, // Fixed height to avoid layout issues
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.surface,
+              Theme.of(context).colorScheme.surface.withOpacity(0.9),
+            ],
+          ),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title with animated icon
-            Row(
-              children: [
-                Icon(
-                  Iconsax.clock,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 20,
-                )
-                    .animate(
-                      onPlay: (controller) => controller.repeat(),
-                    )
-                    .rotate(
-                      duration: const Duration(seconds: 10),
-                      curve: Curves.linear,
-                    ),
-                const SizedBox(width: AppDimensions.sm),
-                Text(
-                  'hourly_forecast'.tr,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
-              ],
-            ),
-
-            // Divider
+            // Title and info row
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppDimensions.sm),
-              child: Divider(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                thickness: 1,
+              padding: const EdgeInsets.all(AppDimensions.md),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Title with icon
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Iconsax.clock,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'hourly_forecast'.tr,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                      ),
+                    ],
+                  ),
+
+                  // Temperature unit display
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      temperatureUnit == AppConstants.unitCelsius ? '°C' : '°F',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            // Chart
-            SizedBox(
-              height: 220,
-              child: _buildChart(context, temperatureUnit, timeFormat),
-            ),
-
-            // Legend
-            Padding(
-              padding: const EdgeInsets.only(top: AppDimensions.md),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildLegendItem(
-                    context,
-                    'Temperature',
-                    Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: AppDimensions.md),
-                  if (widget.showPrecipitation)
-                    _buildLegendItem(
-                      context,
-                      'precipitation'.tr,
-                      Colors.blue.shade400,
-                    ),
-                ],
+            // Main content
+            Expanded(
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, child) {
+                  return _buildChartWithData(context, temperatureUnit);
+                },
               ),
             ),
           ],
         ),
       ),
-    )
-        .animate()
-        .fadeIn(
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        )
-        .slideY(
-          begin: 0.2,
-          end: 0,
+    ).animate().fade(
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeOutQuad,
         );
   }
 
-  Widget _buildChart(
-      BuildContext context, String temperatureUnit, String timeFormat) {
-    // Return placeholder or loading indicator if no data
-    if (widget.hourlyForecasts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Iconsax.chart_1,
-              size: 32,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-            ).animate().scale(
-                  duration: const Duration(milliseconds: 800),
-                  curve: Curves.elasticOut,
-                ),
-            const SizedBox(height: AppDimensions.sm),
-            Text(
-              'loading'.tr,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ).animate().fadeIn(
-                  duration: const Duration(milliseconds: 400),
-                  delay: const Duration(milliseconds: 300),
-                ),
-          ],
+  // Build empty state
+  Widget _buildEmptyState(BuildContext context) {
+    return SizedBox(
+      height: 250,
+      child: Card(
+        elevation: 4,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         ),
-      );
-    }
-
-    // Prepare data for the chart
-    double minY = double.infinity;
-    double maxY = double.negativeInfinity;
-    List<FlSpot> temperatureSpots = [];
-    List<FlSpot> precipitationSpots = [];
-
-    // Find min/max temperature
-    for (int i = 0; i < widget.hourlyForecasts.length; i++) {
-      final forecast = widget.hourlyForecasts[i];
-      final double temp = temperatureUnit == AppConstants.unitCelsius
-          ? forecast.temperature.toDouble()
-          : forecast.tempF;
-
-      if (temp < minY) minY = temp;
-      if (temp > maxY) maxY = temp;
-    }
-
-    // Calculate base line for precipitation (at the bottom of the chart)
-    final tempRange = maxY - minY;
-    final precipBase = minY - (tempRange * 0.1); // Slightly below the min temp
-
-    // Find max precipitation for scaling
-    double maxPrecip = 0.0;
-    for (var forecast in widget.hourlyForecasts) {
-      if (forecast.precipitation > maxPrecip) {
-        maxPrecip = forecast.precipitation;
-      }
-    }
-
-    // Calculate precipitation scaling factor
-    // We want max precipitation to reach about 15% of the chart height
-    final double precipScale =
-        maxPrecip > 0 ? (tempRange * 0.15) / maxPrecip : 1.0;
-
-    // Process hourly forecasts
-    for (int i = 0; i < widget.hourlyForecasts.length; i++) {
-      final forecast = widget.hourlyForecasts[i];
-
-      // Temperature spot
-      final double temp = temperatureUnit == AppConstants.unitCelsius
-          ? forecast.temperature.toDouble()
-          : forecast.tempF;
-      temperatureSpots.add(FlSpot(i.toDouble(), temp));
-
-      // Precipitation spot (if showing)
-      if (widget.showPrecipitation) {
-        final double scaledPrecip =
-            precipBase + (forecast.precipitation * precipScale);
-        precipitationSpots.add(FlSpot(i.toDouble(), scaledPrecip));
-      }
-    }
-
-    // Adjust min/max to add padding
-    minY =
-        minY - (tempRange * 0.15); // More padding at bottom for precipitation
-    maxY = maxY + (tempRange * 0.1); // Some padding at top
-
-    // Create animated line
-    final animatedTemperatureSpots = List.generate(
-      temperatureSpots.length,
-      (index) => FlSpot(
-        temperatureSpots[index].x,
-        minY + (temperatureSpots[index].y - minY) * _animation.value,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Iconsax.chart_fail,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+              ),
+              const SizedBox(height: AppDimensions.sm),
+              Text(
+                'No hourly data available',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onBackground
+                          .withOpacity(0.7),
+                    ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
+  }
 
-    // Create the LineChartData
+  // Build the main chart with interactive data display
+  Widget _buildChartWithData(BuildContext context, String temperatureUnit) {
+    if (widget.hourlyForecasts.isEmpty) {
+      return _buildEmptyState(context);
+    }
+
+    // Find min/max temperature for chart scaling
+    double minTemp = double.infinity;
+    double maxTemp = double.negativeInfinity;
+
+    for (var hourData in widget.hourlyForecasts) {
+      final temp = temperatureUnit == AppConstants.unitCelsius
+          ? hourData.temperature.toDouble()
+          : hourData.tempF;
+
+      if (temp < minTemp) minTemp = temp;
+      if (temp > maxTemp) maxTemp = temp;
+    }
+
+    // Add padding to min/max
+    minTemp = minTemp - 2;
+    maxTemp = maxTemp + 2;
+
+    return Stack(
+      children: [
+        // Temperature curve chart
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: 10,
+              right: 10,
+              bottom: 40,
+              left: 10,
+            ),
+            child: _buildTempChart(context, temperatureUnit, minTemp, maxTemp),
+          ),
+        ),
+
+        // Hours and weather icons row at bottom
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 4,
+          child: SizedBox(
+            height: 40,
+            child: _buildTimeIconsRow(context),
+          ),
+        ),
+
+        // Vertical indicator line for touched position
+        if (_touchedIndex != null &&
+            _touchedIndex! < widget.hourlyForecasts.length)
+          Positioned(
+            top: 10,
+            bottom: 40,
+            left: 10 +
+                (_touchedIndex! *
+                    ((MediaQuery.of(context).size.width - 20) /
+                        widget.hourlyForecasts.length)),
+            child: Container(
+              width: 1,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+            ),
+          ),
+
+        // Highlighted data for touched hour
+        if (_touchedIndex != null &&
+            _touchedIndex! < widget.hourlyForecasts.length)
+          Positioned(
+            top: 10,
+            left: 0,
+            right: 0,
+            child: _buildHighlightedTemperature(context, temperatureUnit),
+          ),
+      ],
+    );
+  }
+
+  // Build the temperature curve chart
+  Widget _buildTempChart(BuildContext context, String temperatureUnit,
+      double minTemp, double maxTemp) {
+    // Safety check for empty data
+    if (widget.hourlyForecasts.isEmpty) {
+      return Container();
+    }
+
+    List<FlSpot> spots = [];
+
+    // Create spots from forecast data
+    for (int i = 0; i < widget.hourlyForecasts.length; i++) {
+      final hour = widget.hourlyForecasts[i];
+      final temp = temperatureUnit == AppConstants.unitCelsius
+          ? hour.temperature.toDouble()
+          : hour.tempF;
+
+      spots.add(FlSpot(i.toDouble(), temp));
+    }
+
     return LineChart(
       LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: 5,
-          getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: Theme.of(context).dividerColor.withOpacity(0.1),
-              strokeWidth: 1,
-              dashArray: [5, 5],
-            );
-          },
-        ),
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (value, meta) {
-                // Show time for every 2 hours to avoid crowding
-                if (value.toInt() % 2 != 0 && value != 0) {
-                  return const SizedBox.shrink();
-                }
-
-                if (value.toInt() >= widget.hourlyForecasts.length) {
-                  return const SizedBox.shrink();
-                }
-
-                final forecast = widget.hourlyForecasts[value.toInt()];
-                final time = timeFormat == AppConstants.unitTimeFormat24h
-                    ? forecast.getFormattedTime24h()
-                    : forecast.getFormattedTime12h();
-
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _getIconForConditionCode(forecast.conditionCode),
-                        size: 16,
-                        color:
-                            _getColorForConditionCode(forecast.conditionCode),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        time,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: forecast.isCurrentHour()
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: forecast.isCurrentHour()
-                                  ? Theme.of(context).colorScheme.primary
-                                  : null,
-                            ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          rightTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 35,
-              getTitlesWidget: (value, meta) {
-                // Only show titles for temperature values, not precipitation
-                if (value < precipBase + (tempRange * 0.05)) {
-                  return const SizedBox.shrink();
-                }
-
-                return Container(
-                  padding: const EdgeInsets.only(right: 8),
-                  decoration: value == touchedIndex
-                      ? BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        )
-                      : null,
-                  child: Text(
-                    value.toInt().toString() + '°',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight:
-                              value == touchedIndex ? FontWeight.bold : null,
-                          color: value == touchedIndex
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                        ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
+        gridData: FlGridData(show: false),
+        titlesData: FlTitlesData(show: false),
         borderData: FlBorderData(show: false),
         minX: 0,
         maxX: (widget.hourlyForecasts.length - 1).toDouble(),
-        minY: minY,
-        maxY: maxY,
+        minY: minTemp,
+        maxY: maxTemp,
         lineTouchData: LineTouchData(
           enabled: true,
-          touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-            if (response == null || response.lineBarSpots == null) {
-              setState(() {
-                touchedIndex = null;
-              });
-              return;
-            }
-            if (event is FlTapUpEvent) {
-              final spot = response.lineBarSpots![0];
-              setState(() {
-                touchedIndex = spot.y.toInt();
-              });
-            }
-          },
           touchTooltipData: LineTouchTooltipData(
-            tooltipRoundedRadius: 8,
-            tooltipPadding: const EdgeInsets.all(8),
-            // tooltipBgColor: Theme.of(context).colorScheme.surface,
-            tooltipBorder: BorderSide(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-            ),
-            tooltipMargin: 8,
-            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-              return touchedBarSpots.map((barSpot) {
-                if (barSpot.barIndex == 0) {
-                  // Temperature line
-                  final index = barSpot.x.toInt();
-                  if (index >= widget.hourlyForecasts.length) return null;
-
-                  final forecast = widget.hourlyForecasts[index];
-
-                  return LineTooltipItem(
-                    '${barSpot.y.toInt()}°',
-                    TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '\n${forecast.conditionText}',
-                        style: TextStyle(
-                          color: Theme.of(context).textTheme.bodySmall?.color,
-                          fontWeight: FontWeight.normal,
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (forecast.chanceOfRain > 0)
-                        TextSpan(
-                          text: '\n💧 ${forecast.chanceOfRain.round()}%',
-                          style: TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.normal,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  );
-                } else {
-                  // Precipitation line
-                  final index = barSpot.x.toInt();
-                  if (index >= widget.hourlyForecasts.length) return null;
-
-                  final forecast = widget.hourlyForecasts[index];
-                  if (forecast.precipitation <= 0) return null;
-
-                  return LineTooltipItem(
-                    '${forecast.precipitation.toStringAsFixed(1)} mm',
-                    TextStyle(
-                      color: Colors.blue.shade400,
-                      fontWeight: FontWeight.normal,
-                      fontSize: 12,
-                    ),
-                  );
-                }
-              }).toList();
-            },
+            // tooltipBgColor: Colors.transparent,
+            tooltipPadding: EdgeInsets.zero,
+            tooltipMargin: 0,
+            getTooltipItems: (_) => [],
           ),
+          touchCallback:
+              (FlTouchEvent event, LineTouchResponse? touchResponse) {
+            setState(() {
+              if (event is FlPanEndEvent ||
+                  event is FlTapUpEvent ||
+                  event is FlLongPressEnd) {
+                _touchedIndex = null;
+              } else if (touchResponse?.lineBarSpots != null &&
+                  touchResponse!.lineBarSpots!.isNotEmpty) {
+                _touchedIndex = touchResponse.lineBarSpots![0].x.toInt();
+              }
+            });
+          },
         ),
         lineBarsData: [
-          // Temperature line
           LineChartBarData(
-            spots: animatedTemperatureSpots,
+            spots: spots
+                .map((spot) => FlSpot(
+                      spot.x,
+                      minTemp + (spot.y - minTemp) * _animation.value,
+                    ))
+                .toList(),
             isCurved: true,
             curveSmoothness: 0.3,
+            preventCurveOverShooting: true,
             color: Theme.of(context).colorScheme.primary,
-            barWidth: 3,
+            barWidth: 4,
             isStrokeCapRound: true,
             dotData: FlDotData(
               show: true,
               getDotPainter: (spot, percent, barData, index) {
-                Color dotColor = Theme.of(context).colorScheme.primary;
-                double radius = 3;
-
-                // Check if this is the current hour
-                final isCurrentHour = index < widget.hourlyForecasts.length &&
-                    widget.hourlyForecasts[index].isCurrentHour();
-
-                if (isCurrentHour) {
-                  radius = 5;
-                  dotColor = Theme.of(context).colorScheme.secondary;
+                if (_touchedIndex == index) {
+                  return FlDotCirclePainter(
+                    radius: 6,
+                    color: Theme.of(context).colorScheme.primary,
+                    strokeWidth: 2,
+                    strokeColor: Colors.white,
+                  );
                 }
-
                 return FlDotCirclePainter(
-                  radius: radius,
-                  color: dotColor,
-                  strokeWidth: 2,
+                  radius: 3.5,
+                  color: Theme.of(context).colorScheme.primary,
+                  strokeWidth: 1,
                   strokeColor: Colors.white,
                 );
               },
@@ -507,49 +371,179 @@ class _HourlyForecastChartState extends State<HourlyForecastChart>
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [
                   Theme.of(context).colorScheme.primary.withOpacity(0.3),
                   Theme.of(context).colorScheme.primary.withOpacity(0.0),
                 ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
               ),
-            ),
-            shadow: const Shadow(
-              blurRadius: 8,
-              color: Colors.black12,
-              offset: Offset(0, 3),
             ),
           ),
-
-          // Precipitation line
-          if (widget.showPrecipitation)
-            LineChartBarData(
-              spots: precipitationSpots,
-              isCurved: true,
-              curveSmoothness: 0.3,
-              color: Colors.blue.shade400,
-              barWidth: 1,
-              isStrokeCapRound: true,
-              dotData: FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.blue.withOpacity(0.1),
-                    Colors.blue.withOpacity(0.0),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  IconData _getIconForConditionCode(int conditionCode) {
+  // Build time and icons row at bottom
+  Widget _buildTimeIconsRow(BuildContext context) {
+    // Safety check
+    if (widget.hourlyForecasts.isEmpty) {
+      return Container();
+    }
+
+    final double itemWidth =
+        MediaQuery.of(context).size.width / widget.hourlyForecasts.length;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: List.generate(widget.hourlyForecasts.length, (index) {
+        final hour = widget.hourlyForecasts[index];
+        final isCurrentHour = hour.isCurrentHour();
+        final isHighlighted = index == _touchedIndex;
+
+        // Get time to display
+        final displayTime = isCurrentHour
+            ? 'Now'
+            : hour.dateTime.hour.toString().padLeft(2, '0');
+
+        return SizedBox(
+          width: itemWidth,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Weather icon
+              Container(
+                decoration: isHighlighted
+                    ? BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      )
+                    : null,
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  _getWeatherIcon(hour.conditionCode),
+                  size: 16,
+                  color: isHighlighted || isCurrentHour
+                      ? Theme.of(context).colorScheme.primary
+                      : _getWeatherIconColor(hour.conditionCode),
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Time label
+              Text(
+                displayTime,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: isHighlighted || isCurrentHour
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onBackground,
+                      fontWeight: isHighlighted || isCurrentHour
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  // Build highlighted temperature/data display when a point is touched
+  Widget _buildHighlightedTemperature(
+      BuildContext context, String temperatureUnit) {
+    if (_touchedIndex == null ||
+        _touchedIndex! >= widget.hourlyForecasts.length) {
+      return const SizedBox.shrink();
+    }
+
+    final hour = widget.hourlyForecasts[_touchedIndex!];
+    final temp = temperatureUnit == AppConstants.unitCelsius
+        ? hour.temperature
+        : hour.tempF.round();
+
+    final itemWidth =
+        MediaQuery.of(context).size.width / widget.hourlyForecasts.length;
+    final xPosition = 10 + (_touchedIndex! * itemWidth) + (itemWidth / 2);
+
+    return Positioned(
+      top: 10,
+      left: xPosition - 40, // Center the tooltip
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Temperature
+            Text.rich(
+              TextSpan(
+                text: '$temp°',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                children: [
+                  TextSpan(
+                    text:
+                        temperatureUnit == AppConstants.unitCelsius ? 'C' : 'F',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Additional data
+            if (widget.showPrecipitation &&
+                (hour.chanceOfRain > 10 || hour.chanceOfSnow > 10))
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hour.chanceOfRain > hour.chanceOfSnow
+                        ? Iconsax.cloud_drizzle
+                        : Iconsax.cloud_snow,
+                    size: 14,
+                    color: hour.chanceOfRain > hour.chanceOfSnow
+                        ? Colors.blue
+                        : Colors.lightBlue,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${hour.chanceOfRain > hour.chanceOfSnow ? hour.chanceOfRain.round() : hour.chanceOfSnow.round()}%',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: hour.chanceOfRain > hour.chanceOfSnow
+                              ? Colors.blue
+                              : Colors.lightBlue,
+                        ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Get weather icon based on condition code
+  IconData _getWeatherIcon(int conditionCode) {
     if (conditionCode == 1000) {
       return Iconsax.sun_1;
     } else if (conditionCode >= 1003 && conditionCode <= 1009) {
@@ -565,7 +559,8 @@ class _HourlyForecastChartState extends State<HourlyForecastChart>
     }
   }
 
-  Color _getColorForConditionCode(int conditionCode) {
+  // Get color for weather icon
+  Color _getWeatherIconColor(int conditionCode) {
     if (conditionCode == 1000) {
       return Colors.orange;
     } else if (conditionCode >= 1003 && conditionCode <= 1009) {
@@ -579,34 +574,5 @@ class _HourlyForecastChartState extends State<HourlyForecastChart>
     } else {
       return Colors.grey;
     }
-  }
-
-  Widget _buildLegendItem(BuildContext context, String label, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.5),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.normal,
-              ),
-        ),
-      ],
-    );
   }
 }

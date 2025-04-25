@@ -168,7 +168,7 @@ class WeatherDetailsPage extends StatelessWidget {
 
                 const SizedBox(height: AppDimensions.lg),
 
-                // Daily forecast
+// Daily forecast
                 if (forecast != null && forecast.dailyForecasts.isNotEmpty)
                   DailyForecastWidget(
                     dailyForecasts: forecast.dailyForecasts,

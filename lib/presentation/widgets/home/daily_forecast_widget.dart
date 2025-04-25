@@ -6,7 +6,8 @@ import 'package:sundrift/core/constants/app_constants.dart';
 import 'package:sundrift/core/storage/local_storage.dart';
 import 'package:sundrift/data/models/day_forecast_model.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'dart:ui';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 class DailyForecastWidget extends StatefulWidget {
   final List<DayForecastModel> dailyForecasts;
@@ -20,30 +21,32 @@ class DailyForecastWidget extends StatefulWidget {
   State<DailyForecastWidget> createState() => _DailyForecastWidgetState();
 }
 
-class _DailyForecastWidgetState extends State<DailyForecastWidget>
-    with SingleTickerProviderStateMixin {
-  // Animation controller for chart
-  late AnimationController _animationController;
-  late Animation<double> _animation;
-  int? _hoveredIndex;
+class _DailyForecastWidgetState extends State<DailyForecastWidget> {
+  // Page controller for the horizontal page view
+  late PageController _pageController;
+
+  // Current page index
+  int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-    _animation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOutCubic,
-    );
-    _animationController.forward();
+    _pageController = PageController();
+
+    // Listen for page changes
+    _pageController.addListener(() {
+      int page = _pageController.page?.round() ?? 0;
+      if (_currentPage != page) {
+        setState(() {
+          _currentPage = page;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -113,28 +116,36 @@ class _DailyForecastWidgetState extends State<DailyForecastWidget>
           ),
         ),
 
-        // Visual temperature chart for 7 days
-        Container(
-          height: 160,
-          margin: const EdgeInsets.only(bottom: AppDimensions.md),
-          child: _buildTemperatureChart(context),
-        ),
-
-        // Daily forecast cards
-        Column(
-          children: List.generate(
-            widget.dailyForecasts.length,
-            (index) {
+        // Horizontal PageView for forecast cards
+        SizedBox(
+          height: 280, // Reduced height from 320 to 280
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: widget.dailyForecasts.length,
+            itemBuilder: (context, index) {
               final day = widget.dailyForecasts[index];
               final isToday = day.isToday();
+              return _buildForecastCard(context, day, isToday, index);
+            },
+          ),
+        ),
 
-              // Create delay for staggered animation
-              final delay = Duration(milliseconds: 100 * index);
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppDimensions.sm),
-                child: _buildForecastCard(context, day, isToday, index, delay),
-              );
+        // Page indicator dots
+        const SizedBox(height: AppDimensions.md),
+        Center(
+          child: SmoothPageIndicator(
+            controller: _pageController,
+            count: widget.dailyForecasts.length,
+            effect: WormEffect(
+              dotHeight: 8,
+              dotWidth: 8,
+              activeDotColor: Theme.of(context).colorScheme.primary,
+              dotColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            ),
+            onDotClicked: (index) {
+              _pageController.animateToPage(index,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut);
             },
           ),
         ),
@@ -145,141 +156,12 @@ class _DailyForecastWidgetState extends State<DailyForecastWidget>
         );
   }
 
-  // Build temperature chart
-  Widget _buildTemperatureChart(BuildContext context) {
-    final LocalStorage localStorage = Get.find<LocalStorage>();
-    final temperatureUnit = localStorage.getString(
-      AppConstants.storageKeyTemperatureUnit,
-      defaultValue: AppConstants.defaultTemperatureUnit,
-    );
-
-    // Find min/max temperatures
-    double minTemp = double.infinity;
-    double maxTemp = double.negativeInfinity;
-
-    for (var day in widget.dailyForecasts) {
-      final dayMin = temperatureUnit == AppConstants.unitCelsius
-          ? day.minTemp.toDouble()
-          : day.minTempF;
-      final dayMax = temperatureUnit == AppConstants.unitCelsius
-          ? day.maxTemp.toDouble()
-          : day.maxTempF;
-
-      if (dayMin < minTemp) minTemp = dayMin;
-      if (dayMax > maxTemp) maxTemp = dayMax;
-    }
-
-    // Add padding to range
-    minTemp = minTemp - 2;
-    maxTemp = maxTemp + 2;
-    final range = maxTemp - minTemp;
-
-    return Card(
-      elevation: 8,
-      shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Theme.of(context).colorScheme.surface.withOpacity(0.85),
-                  Theme.of(context).colorScheme.surface.withOpacity(0.95),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            padding: const EdgeInsets.all(AppDimensions.md),
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: _TemperatureChartPainter(
-                    days: widget.dailyForecasts,
-                    minTemp: minTemp,
-                    maxTemp: maxTemp,
-                    temperatureUnit: temperatureUnit,
-                    progress: _animation.value,
-                    primaryColor: Theme.of(context).colorScheme.primary,
-                    secondaryColor: Theme.of(context).colorScheme.secondary,
-                    textColor: Theme.of(context).colorScheme.onSurface,
-                    gridColor: Theme.of(context).dividerColor.withOpacity(0.3),
-                    hoveredIndex: _hoveredIndex,
-                  ),
-                  child: MouseRegion(
-                    onHover: (event) {
-                      final RenderBox box =
-                          context.findRenderObject() as RenderBox;
-                      final position = box.globalToLocal(event.position);
-                      final width = box.size.width;
-
-                      // Calculate day index
-                      final dayWidth = width / widget.dailyForecasts.length;
-                      int index = (position.dx / dayWidth).floor();
-
-                      if (index >= 0 && index < widget.dailyForecasts.length) {
-                        if (_hoveredIndex != index) {
-                          setState(() {
-                            _hoveredIndex = index;
-                          });
-                        }
-                      }
-                    },
-                    onExit: (event) {
-                      setState(() {
-                        _hoveredIndex = null;
-                      });
-                    },
-                    child: GestureDetector(
-                      onTapUp: (details) {
-                        final RenderBox box =
-                            context.findRenderObject() as RenderBox;
-                        final position =
-                            box.globalToLocal(details.globalPosition);
-                        final width = box.size.width;
-
-                        // Calculate day index
-                        final dayWidth = width / widget.dailyForecasts.length;
-                        int index = (position.dx / dayWidth).floor();
-
-                        if (index >= 0 &&
-                            index < widget.dailyForecasts.length) {
-                          _showDayDetailsBottomSheet(
-                              context, widget.dailyForecasts[index]);
-                        }
-                      },
-                      child: Container(
-                        color: Colors.transparent,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // Build forecast card for each day
   Widget _buildForecastCard(
     BuildContext context,
     DayForecastModel day,
     bool isToday,
     int index,
-    Duration delay,
   ) {
     final LocalStorage localStorage = Get.find<LocalStorage>();
 
@@ -318,419 +200,496 @@ class _DailyForecastWidgetState extends State<DailyForecastWidget>
     final lowPercent = range > 0 ? (minTemp - lowest) / range : 0.3;
     final highPercent = range > 0 ? (maxTemp - lowest) / range : 0.7;
 
-    return Card(
-      elevation: isToday ? 8 : 4,
-      shadowColor: Theme.of(context)
-          .colorScheme
-          .primary
-          .withOpacity(isToday ? 0.3 : 0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      ),
-      child: InkWell(
-        onTap: () => _showDayDetailsBottomSheet(context, day),
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        splashColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-        highlightColor: Theme.of(context).colorScheme.primary.withOpacity(0.05),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: isToday
-                ? LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                      Theme.of(context).colorScheme.surface,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            border: isToday
-                ? Border.all(
-                    color:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                    width: 1,
-                  )
-                : null,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppDimensions.md),
-            child: Column(
-              children: [
-                // Top Row: Day name, date, and temperature
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Day name and date
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+    return AnimationConfiguration.staggeredGrid(
+      position: index,
+      columnCount: 1,
+      child: ScaleAnimation(
+        duration: const Duration(milliseconds: 400),
+        scale: 0.94,
+        child: FadeInAnimation(
+          child: Card(
+            elevation: 2,
+            shadowColor: Theme.of(context)
+                .colorScheme
+                .primary
+                .withOpacity(isToday ? 0.3 : 0.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            ),
+            child: InkWell(
+              onTap: () => _showDayDetailsBottomSheet(context, day),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+              splashColor:
+                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              highlightColor:
+                  Theme.of(context).colorScheme.primary.withOpacity(0.05),
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: isToday
+                      ? LinearGradient(
+                          colors: [
+                            Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.1),
+                            Theme.of(context).colorScheme.surface,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  border: isToday
+                      ? Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.5),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppDimensions.md),
+                  child: Column(
+                    children: [
+                      // Top Row: Day name, date, and temperature
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              if (isToday)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'Today',
+                          // Day name and date
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (isToday)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'Today',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                      ),
+                                    if (isToday) const SizedBox(width: 8),
+                                    Text(
+                                      isToday
+                                          ? day.getDayName()
+                                          : day.getDayName(),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: isToday
+                                                ? FontWeight.bold
+                                                : FontWeight.w600,
+                                            color: isToday
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                : null,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                if (!isToday)
+                                  Text(
+                                    day.date,
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall
                                         ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.color
+                                              ?.withOpacity(0.7),
                                         ),
                                   ),
-                                ),
-                              if (isToday) const SizedBox(width: 8),
-                              Text(
-                                isToday ? day.getDayName() : day.getDayName(),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: isToday
-                                          ? FontWeight.bold
-                                          : FontWeight.w600,
-                                      color: isToday
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                          : null,
+                              ],
+                            ),
+                          ),
+
+                          // Temperature with high/low
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text.rich(
+                                TextSpan(
+                                  text: '$maxTemp°',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red.shade700,
+                                      ),
+                                  children: [
+                                    TextSpan(
+                                      text: temperatureUnit ==
+                                              AppConstants.unitCelsius
+                                          ? 'C'
+                                          : 'F',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade700,
+                                          ),
                                     ),
+                                  ],
+                                ),
+                              ),
+                              Text.rich(
+                                TextSpan(
+                                  text: '$minTemp°',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: Colors.blue.shade700,
+                                      ),
+                                  children: [
+                                    TextSpan(
+                                      text: temperatureUnit ==
+                                              AppConstants.unitCelsius
+                                          ? 'C'
+                                          : 'F',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Colors.blue.shade700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                          if (!isToday)
-                            Text(
-                              day.date,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.color
-                                        ?.withOpacity(0.7),
-                                  ),
-                            ),
                         ],
                       ),
-                    ),
 
-                    // Temperature with high/low
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '$maxTemp°',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                              ),
-                        ),
-                        Text(
-                          '$minTemp°',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: Colors.blue.shade700,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: AppDimensions.md),
 
-                const SizedBox(height: AppDimensions.md),
-
-                // Middle section with weather icon and condition
-                Row(
-                  children: [
-                    // Weather icon in colored container
-                    Container(
-                      padding: const EdgeInsets.all(AppDimensions.sm),
-                      decoration: BoxDecoration(
-                        color: _getConditionColor(day.conditionCode)
-                            .withOpacity(0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppDimensions.radiusMd),
-                      ),
-                      child: Icon(
-                        _getIconForConditionCode(day.conditionCode),
-                        size: 32,
-                        color: _getConditionColor(day.conditionCode),
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.md),
-
-                    // Weather condition text
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // Middle section with weather icon and condition
+                      Row(
                         children: [
-                          Text(
-                            day.conditionText,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          // Weather icon in colored container
+                          Container(
+                            padding: const EdgeInsets.all(AppDimensions.sm),
+                            decoration: BoxDecoration(
+                              color: _getConditionColor(day.conditionCode)
+                                  .withOpacity(0.1),
+                              borderRadius:
+                                  BorderRadius.circular(AppDimensions.radiusMd),
+                            ),
+                            child: Icon(
+                              _getIconForConditionCode(day.conditionCode),
+                              size: 32,
+                              color: _getConditionColor(day.conditionCode),
+                            ),
                           ),
+                          const SizedBox(width: AppDimensions.md),
 
-                          // Precipitation forecast if available
-                          if (day.chanceOfRain > 0 || day.chanceOfSnow > 0)
-                            Row(
+                          // Weather condition text
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  day.chanceOfRain > day.chanceOfSnow
-                                      ? Iconsax.cloud_drizzle
-                                      : Iconsax.cloud_snow,
-                                  size: 14,
-                                  color: day.chanceOfRain > day.chanceOfSnow
-                                      ? Colors.blue
-                                      : Colors.lightBlue,
-                                ),
-                                const SizedBox(width: 4),
                                 Text(
-                                  '${(day.chanceOfRain > day.chanceOfSnow ? day.chanceOfRain : day.chanceOfSnow).round()}%',
+                                  day.conditionText,
                                   style: Theme.of(context)
                                       .textTheme
-                                      .bodySmall
+                                      .titleMedium
                                       ?.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+
+                                // Precipitation forecast if available
+                                if (day.chanceOfRain > 0 ||
+                                    day.chanceOfSnow > 0)
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        day.chanceOfRain > day.chanceOfSnow
+                                            ? Iconsax.cloud_drizzle
+                                            : Iconsax.cloud_snow,
+                                        size: 14,
                                         color:
                                             day.chanceOfRain > day.chanceOfSnow
                                                 ? Colors.blue
                                                 : Colors.lightBlue,
-                                        fontWeight: FontWeight.w500,
                                       ),
-                                ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${(day.chanceOfRain > day.chanceOfSnow ? day.chanceOfRain : day.chanceOfSnow).round()}%',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: day.chanceOfRain >
+                                                      day.chanceOfSnow
+                                                  ? Colors.blue
+                                                  : Colors.lightBlue,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
                               ],
                             ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
 
-                const SizedBox(height: AppDimensions.md),
+                      const SizedBox(height: AppDimensions.md),
 
-                // Bottom section with temperature range
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '$minTemp°',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                        Text(
-                          '$maxTemp°',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.red.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-
-                    // Custom temperature range slider
-                    AnimatedBuilder(
-                      animation: _animation,
-                      builder: (context, child) {
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: Container(
-                            height: 6,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
-                              color: Colors.grey.shade200,
-                            ),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final width = constraints.maxWidth;
-                                final lowPos =
-                                    lowPercent * width * _animation.value;
-                                final highPos =
-                                    highPercent * width * _animation.value;
-
-                                return Stack(
-                                  children: [
-                                    // Cold to hot gradient
-                                    Container(
-                                      width: width,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.blue.shade200,
-                                            Colors.blue.shade100,
-                                            Colors.grey.shade100,
-                                            Colors.orange.shade100,
-                                            Colors.red.shade100,
-                                          ],
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                        ),
+                      // Bottom section with temperature range
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text.rich(
+                                TextSpan(
+                                  text: '$minTemp°',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Colors.blue.shade700,
+                                        fontWeight: FontWeight.w500,
                                       ),
+                                  children: [
+                                    TextSpan(
+                                      text: temperatureUnit ==
+                                              AppConstants.unitCelsius
+                                          ? 'C'
+                                          : 'F',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: Colors.blue.shade700,
+                                          ),
                                     ),
+                                  ],
+                                ),
+                              ),
+                              Text.rich(
+                                TextSpan(
+                                  text: '$maxTemp°',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Colors.red.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                  children: [
+                                    TextSpan(
+                                      text: temperatureUnit ==
+                                              AppConstants.unitCelsius
+                                          ? 'C'
+                                          : 'F',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: Colors.red.shade700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
 
-                                    // Today's temperature range
-                                    Positioned(
-                                      left: lowPos,
-                                      child: Container(
-                                        width: highPos - lowPos,
-                                        height: 6,
+                          // Custom temperature range slider
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                color: Colors.grey.shade200,
+                              ),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final width = constraints.maxWidth;
+                                  final lowPos = lowPercent * width;
+                                  final highPos = highPercent * width;
+
+                                  return Stack(
+                                    children: [
+                                      // Cold to hot gradient
+                                      Container(
+                                        width: width,
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
                                             colors: [
-                                              Colors.blue.shade600,
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary,
-                                              Colors.red.shade600,
+                                              Colors.blue.shade200,
+                                              Colors.blue.shade100,
+                                              Colors.grey.shade100,
+                                              Colors.orange.shade100,
+                                              Colors.red.shade100,
                                             ],
                                             begin: Alignment.centerLeft,
                                             end: Alignment.centerRight,
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withOpacity(0.4),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ],
                                         ),
                                       ),
-                                    ),
 
-                                    // Low temperature indicator
-                                    Positioned(
-                                      left: lowPos - 4,
-                                      top: -2,
-                                      child: Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade600,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  Colors.black.withOpacity(0.2),
-                                              blurRadius: 2,
-                                              offset: const Offset(0, 1),
+                                      // Today's temperature range
+                                      Positioned(
+                                        left: lowPos,
+                                        child: Container(
+                                          width: highPos - lowPos,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Colors.blue.shade600,
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                                Colors.red.shade600,
+                                              ],
+                                              begin: Alignment.centerLeft,
+                                              end: Alignment.centerRight,
                                             ),
-                                          ],
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .withOpacity(0.4),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ),
 
-                                    // High temperature indicator
-                                    Positioned(
-                                      left: highPos - 4,
-                                      top: -2,
-                                      child: Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: Colors.red.shade600,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  Colors.black.withOpacity(0.2),
-                                              blurRadius: 2,
-                                              offset: const Offset(0, 1),
+                                      // Low temperature indicator
+                                      Positioned(
+                                        left: lowPos - 4,
+                                        top: -2,
+                                        child: Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade600,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1,
                                             ),
-                                          ],
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.2),
+                                                blurRadius: 2,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                );
-                              },
+
+                                      // High temperature indicator
+                                      Positioned(
+                                        left: highPos - 4,
+                                        top: -2,
+                                        child: Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade600,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.2),
+                                                blurRadius: 2,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    ),
 
-                    // Extra weather details row
-                    const SizedBox(height: AppDimensions.sm),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildMiniInfoItem(
-                          context,
-                          Iconsax.wind,
-                          '${day.maxWind.round()} km/h',
-                          Colors.teal,
-                        ),
-                        _buildMiniInfoItem(
-                          context,
-                          Iconsax.drop,
-                          '${day.avgHumidity.round()}%',
-                          Colors.blue,
-                        ),
-                        _buildMiniInfoItem(
-                          context,
-                          Iconsax.sun_1,
-                          'UV ${day.uv}',
-                          Colors.orange,
-                        ),
-                      ],
-                    ),
-                  ],
+                          // Extra weather details row
+                          const SizedBox(height: AppDimensions.sm),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildMiniInfoItem(
+                                context,
+                                Iconsax.wind,
+                                '${day.maxWind.round()} km/h',
+                                Colors.teal,
+                              ),
+                              _buildMiniInfoItem(
+                                context,
+                                Iconsax.drop,
+                                '${day.avgHumidity.round()}%',
+                                Colors.blue,
+                              ),
+                              _buildMiniInfoItem(
+                                context,
+                                Iconsax.sun_1,
+                                'UV ${day.uv}',
+                                Colors.orange,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    )
-        .animate(delay: delay)
-        .fadeIn(
-          duration: const Duration(milliseconds: 500),
-        )
-        .slideY(
-          begin: 0.1,
-          end: 0,
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeOutQuad,
-        );
+    );
   }
 
   // Build mini info item for the forecast card
@@ -900,20 +859,55 @@ class _DailyForecastWidgetState extends State<DailyForecastWidget>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        '$maxTemp°',
-                        style:
-                            Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                  color: Colors.red.shade700,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                      Text.rich(
+                        TextSpan(
+                          text: '$maxTemp°',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineLarge
+                              ?.copyWith(
+                                color: Colors.red.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
+                          children: [
+                            TextSpan(
+                              text: temperatureUnit == AppConstants.unitCelsius
+                                  ? 'C'
+                                  : 'F',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.red.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        ),
                       ),
-                      Text(
-                        '$minTemp°',
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  color: Colors.blue.shade700,
-                                ),
+                      Text.rich(
+                        TextSpan(
+                          text: '$minTemp°',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                color: Colors.blue.shade700,
+                              ),
+                          children: [
+                            TextSpan(
+                              text: temperatureUnit == AppConstants.unitCelsius
+                                  ? 'C'
+                                  : 'F',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Colors.blue.shade700,
+                                  ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1079,382 +1073,5 @@ class _DailyForecastWidgetState extends State<DailyForecastWidget>
     } else {
       return Colors.grey;
     }
-  }
-}
-
-// Custom painter for temperature chart
-class _TemperatureChartPainter extends CustomPainter {
-  final List<DayForecastModel> days;
-  final double minTemp;
-  final double maxTemp;
-  final String temperatureUnit;
-  final double progress;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final Color textColor;
-  final Color gridColor;
-  final int? hoveredIndex;
-
-  _TemperatureChartPainter({
-    required this.days,
-    required this.minTemp,
-    required this.maxTemp,
-    required this.temperatureUnit,
-    required this.progress,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.textColor,
-    required this.gridColor,
-    this.hoveredIndex,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final width = size.width;
-    final height = size.height;
-    final dayWidth = width / days.length;
-
-    // Text painters
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-    );
-
-    // Day names
-    for (int i = 0; i < days.length; i++) {
-      final day = days[i];
-      final isToday = day.isToday();
-      final isHovered = hoveredIndex == i;
-
-      // Center point for this day
-      final centerX = dayWidth * i + dayWidth / 2;
-
-      // Draw day label
-      textPainter.text = TextSpan(
-        text: isToday ? 'Today' : day.getShortDayName(),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight:
-              isToday || isHovered ? FontWeight.bold : FontWeight.normal,
-          color:
-              isToday || isHovered ? primaryColor : textColor.withOpacity(0.7),
-        ),
-      );
-
-      textPainter.layout();
-      textPainter.paint(
-          canvas,
-          Offset(centerX - textPainter.width / 2,
-              height - textPainter.height - 5));
-
-      // Draw grid lines
-      if (i > 0) {
-        final paint = Paint()
-          ..color = gridColor
-          ..strokeWidth = 1.0
-          ..style = PaintingStyle.stroke;
-
-        final path = Path();
-        path.moveTo(i * dayWidth, 0);
-        path.lineTo(i * dayWidth, height - 25); // Stop above the day names
-
-        canvas.drawPath(path, paint);
-      }
-    }
-
-    // Temperature range
-    final tempRange = maxTemp - minTemp;
-
-    // Draw horizontal grid lines and temperature labels
-    for (int temp = minTemp.round(); temp <= maxTemp.round(); temp += 5) {
-      if (temp % 5 == 0) {
-        final y = height - 30 - ((temp - minTemp) / tempRange) * (height - 50);
-
-        final paint = Paint()
-          ..color = gridColor
-          ..strokeWidth = 0.5;
-
-        canvas.drawLine(
-          Offset(0, y),
-          Offset(width, y),
-          paint,
-        );
-
-        // Temperature label
-        textPainter.text = TextSpan(
-          text: '$temp°',
-          style: TextStyle(
-            fontSize: 10,
-            color: textColor.withOpacity(0.6),
-          ),
-        );
-
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(5, y - textPainter.height / 2));
-      }
-    }
-
-    // Draw max temperature line
-    final maxPoints = <Offset>[];
-    final minPoints = <Offset>[];
-
-    for (int i = 0; i < days.length; i++) {
-      final day = days[i];
-
-      // Get max and min temps
-      final maxT =
-          temperatureUnit == 'celsius' ? day.maxTemp.toDouble() : day.maxTempF;
-
-      final minT =
-          temperatureUnit == 'celsius' ? day.minTemp.toDouble() : day.minTempF;
-
-      // Calculate y positions (inverted y-axis)
-      final maxY = height - 30 - ((maxT - minTemp) / tempRange) * (height - 50);
-      final minY = height - 30 - ((minT - minTemp) / tempRange) * (height - 50);
-
-      // X position at center of day column
-      final x = dayWidth * i + dayWidth / 2;
-
-      // Collect points for lines
-      maxPoints.add(Offset(x, maxY));
-      minPoints.add(Offset(x, minY));
-    }
-
-    // Draw area between min and max
-    final areaPath = Path();
-    areaPath.moveTo(maxPoints.first.dx, maxPoints.first.dy);
-
-    for (int i = 0; i < maxPoints.length; i++) {
-      final point = Offset(
-        maxPoints[i].dx,
-        maxPoints[i].dy + (1 - progress) * (height - maxPoints[i].dy),
-      );
-
-      if (i == 0) {
-        areaPath.moveTo(point.dx, point.dy);
-      } else {
-        // Use quadratic bezier for smoother curve
-        final prevPoint = Offset(
-          maxPoints[i - 1].dx,
-          maxPoints[i - 1].dy + (1 - progress) * (height - maxPoints[i - 1].dy),
-        );
-
-        final controlX = (prevPoint.dx + point.dx) / 2;
-        areaPath.quadraticBezierTo(
-          controlX,
-          prevPoint.dy,
-          point.dx,
-          point.dy,
-        );
-      }
-    }
-
-    // Continue with min temperature line in reverse
-    for (int i = minPoints.length - 1; i >= 0; i--) {
-      final point = Offset(
-        minPoints[i].dx,
-        minPoints[i].dy + (1 - progress) * (height - minPoints[i].dy),
-      );
-
-      if (i == minPoints.length - 1) {
-        areaPath.lineTo(point.dx, point.dy);
-      } else {
-        // Use quadratic bezier for smoother curve
-        final prevPoint = Offset(
-          minPoints[i + 1].dx,
-          minPoints[i + 1].dy + (1 - progress) * (height - minPoints[i + 1].dy),
-        );
-
-        final controlX = (prevPoint.dx + point.dx) / 2;
-        areaPath.quadraticBezierTo(
-          controlX,
-          prevPoint.dy,
-          point.dx,
-          point.dy,
-        );
-      }
-    }
-
-    areaPath.close();
-
-    // Fill the area with gradient
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        primaryColor.withOpacity(0.5),
-        secondaryColor.withOpacity(0.2),
-      ],
-    ).createShader(Rect.fromLTWH(0, 0, width, height));
-
-    final areaPaint = Paint()
-      ..shader = gradient
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(areaPath, areaPaint);
-
-    // Draw max temperature line
-    final maxPath = Path();
-    for (int i = 0; i < maxPoints.length; i++) {
-      final point = Offset(
-        maxPoints[i].dx,
-        maxPoints[i].dy + (1 - progress) * (height - maxPoints[i].dy),
-      );
-
-      if (i == 0) {
-        maxPath.moveTo(point.dx, point.dy);
-      } else {
-        // Use quadratic bezier for smoother curve
-        final prevPoint = Offset(
-          maxPoints[i - 1].dx,
-          maxPoints[i - 1].dy + (1 - progress) * (height - maxPoints[i - 1].dy),
-        );
-
-        final controlX = (prevPoint.dx + point.dx) / 2;
-        maxPath.quadraticBezierTo(
-          controlX,
-          prevPoint.dy,
-          point.dx,
-          point.dy,
-        );
-      }
-    }
-
-    final maxLinePaint = Paint()
-      ..color = Colors.red.shade600
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(maxPath, maxLinePaint);
-
-    // Draw min temperature line
-    final minPath = Path();
-    for (int i = 0; i < minPoints.length; i++) {
-      final point = Offset(
-        minPoints[i].dx,
-        minPoints[i].dy + (1 - progress) * (height - minPoints[i].dy),
-      );
-
-      if (i == 0) {
-        minPath.moveTo(point.dx, point.dy);
-      } else {
-        // Use quadratic bezier for smoother curve
-        final prevPoint = Offset(
-          minPoints[i - 1].dx,
-          minPoints[i - 1].dy + (1 - progress) * (height - minPoints[i - 1].dy),
-        );
-
-        final controlX = (prevPoint.dx + point.dx) / 2;
-        minPath.quadraticBezierTo(
-          controlX,
-          prevPoint.dy,
-          point.dx,
-          point.dy,
-        );
-      }
-    }
-
-    final minLinePaint = Paint()
-      ..color = Colors.blue.shade600
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(minPath, minLinePaint);
-
-    // Draw points and temperature values
-    for (int i = 0; i < days.length; i++) {
-      final day = days[i];
-      final isToday = day.isToday();
-      final isHovered = hoveredIndex == i;
-
-      // Get temps
-      final maxT =
-          temperatureUnit == 'celsius' ? day.maxTemp.toDouble() : day.maxTempF;
-
-      final minT =
-          temperatureUnit == 'celsius' ? day.minTemp.toDouble() : day.minTempF;
-
-      // Animated positions
-      final maxY = height - 30 - ((maxT - minTemp) / tempRange) * (height - 50);
-      final minY = height - 30 - ((minT - minTemp) / tempRange) * (height - 50);
-
-      final maxPoint = Offset(
-        dayWidth * i + dayWidth / 2,
-        maxY + (1 - progress) * (height - maxY),
-      );
-
-      final minPoint = Offset(
-        dayWidth * i + dayWidth / 2,
-        minY + (1 - progress) * (height - minY),
-      );
-
-      // Draw max temperature point
-      canvas.drawCircle(
-        maxPoint,
-        isToday || isHovered ? 4.0 : 3.0,
-        Paint()
-          ..color = Colors.red.shade600
-          ..style = PaintingStyle.fill,
-      );
-
-      // Draw min temperature point
-      canvas.drawCircle(
-        minPoint,
-        isToday || isHovered ? 4.0 : 3.0,
-        Paint()
-          ..color = Colors.blue.shade600
-          ..style = PaintingStyle.fill,
-      );
-
-      // Draw temperature labels if hovered or today
-      if (isHovered || isToday) {
-        // Max temp label
-        textPainter.text = TextSpan(
-          text: '${maxT.round()}°',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.red.shade700,
-          ),
-        );
-
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(
-            maxPoint.dx - textPainter.width / 2,
-            maxPoint.dy - textPainter.height - 5,
-          ),
-        );
-
-        // Min temp label
-        textPainter.text = TextSpan(
-          text: '${minT.round()}°',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue.shade700,
-          ),
-        );
-
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(
-            minPoint.dx - textPainter.width / 2,
-            minPoint.dy + 5,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _TemperatureChartPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.hoveredIndex != hoveredIndex;
   }
 }
