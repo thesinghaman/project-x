@@ -8,6 +8,7 @@ import 'package:sundrift/data/models/favorite_location_model.dart';
 import 'package:sundrift/data/models/current_weather_model.dart';
 import 'package:sundrift/data/models/forecast_model.dart';
 import 'package:sundrift/presentation/controllers/weather_details_controller.dart';
+import 'package:sundrift/presentation/widgets/common/enhanced_weather_details.dart';
 import 'package:sundrift/presentation/widgets/common/weather_stats_grid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
@@ -123,40 +124,16 @@ class WeatherDetailsPage extends StatelessWidget {
               children: [
                 // Weather stats grid
                 Animate(
-                  effects: const [
-                    FadeEffect(duration: AppDimensions.animNormal),
-                    SlideEffect(
-                      duration: AppDimensions.animNormal,
-                      begin: Offset(0, 0.2),
-                      end: Offset(0, 0),
-                    ),
-                  ],
-                  child: WeatherStatsGrid(
-                    stats: {
-                      'humidity': WeatherStat(
-                        value: '${currentWeather.humidity}%',
-                        icon: Iconsax.drop,
-                        iconColor: Colors.blue,
+                    effects: const [
+                      FadeEffect(duration: AppDimensions.animNormal),
+                      SlideEffect(
+                        duration: AppDimensions.animNormal,
+                        begin: Offset(0, 0.2),
+                        end: Offset(0, 0),
                       ),
-                      'wind': WeatherStat(
-                        value: '${currentWeather.windSpeed.round()} km/h',
-                        icon: Iconsax.wind,
-                        iconColor: Colors.teal,
-                        description: currentWeather.windDirection,
-                      ),
-                      'pressure': WeatherStat(
-                        value: '${currentWeather.pressure} hPa',
-                        icon: Iconsax.weight,
-                        iconColor: Colors.purple,
-                      ),
-                      'uv_index': WeatherStat(
-                        value: '${currentWeather.uv}',
-                        icon: Iconsax.sun_1,
-                        iconColor: Colors.orange,
-                      ),
-                    },
-                  ),
-                ),
+                    ],
+                    child:
+                        EnhancedWeatherDetails(currentWeather: currentWeather)),
 
                 const SizedBox(height: AppDimensions.lg),
 
